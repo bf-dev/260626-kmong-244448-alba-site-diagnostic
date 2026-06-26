@@ -1,0 +1,51 @@
+name: build-extractor
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+permissions:
+  contents: write
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.11" }
+      - name: Install deps
+        run: |
+          pip install --upgrade pip
+          pip install selenium webdriver-manager requests openpyxl pyinstaller
+      - name: Build exe
+        run: >
+          pyinstaller --onefile --windowed
+          --name "업체연락처수집기"
+          --collect-all selenium
+          --collect-all trio
+          --collect-all trio_websocket
+          --collect-all outcome
+          --collect-all wsproto
+          --collect-all sortedcontainers
+          extractor.py
+      - name: Smoke test
+        shell: pwsh
+        env:
+          EXTRACTOR_AUTO: "1"
+          EXTRACTOR_HEADLESS: "1"
+          EXTRACTOR_MAX: "2"
+        run: |
+          $p = Start-Process -FilePath ".\dist\업체연락처수집기.exe" -PassThru
+          $p | Wait-Process -Timeout 300
+          $xlsx = Join-Path $env:USERPROFILE "Desktop\업체연락처_여우알바_퀸알바.xlsx"
+          if (-not (Test-Path $xlsx)) { Write-Error "No xlsx produced"; exit 1 }
+          Write-Host "OK: $xlsx"
+      - name: Publish to Release
+        if: always()
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create extractor-latest dist/*.exe \
+            --title "업체연락처수집기 (latest)" \
+            --notes "Auto-built Windows extractor exe." \
+          || gh release upload extractor-latest dist/*.exe --clobber
