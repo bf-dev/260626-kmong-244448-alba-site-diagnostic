@@ -20,6 +20,10 @@
 [인증 완료 - 다음] 버튼만 누르면 됨. 진행상황은 창 안의 로그에 표시되고
 끝나면 결과 폴더가 자동으로 열린다. `DIAG_AUTO=1` 이면 GUI 없이 헤드리스 일괄(검증용).
 
+진단 범위: 목록은 전체 페이지 순회, 상세(하위)는 **사이트당 샘플 기본 80건**
+(`DIAG_MAX_DETAIL`, 0=전수). foxalba 등록건이 3천건+ 이라 전수 저장 시 zip 이 수십MB·1시간+ 가 되어
+크몽 회신이 어려움 → 진단은 샘플로 구조만 확보(수MB·수분), 전수 추출은 최종 프로그램이 담당.
+
 ## 빌드 (Windows exe)
 GitHub Actions `windows-latest` + PyInstaller `--onefile --windowed` 로 빌드.
 CI에서 (a) 실제 exe 헤드리스 실행→zip 생성 스모크, (b) GUI 창 구성(tkinter 번들) 자기검증

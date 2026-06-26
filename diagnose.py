@@ -7,8 +7,8 @@
   2) 브라우저에서 '비회원 본인인증'을 1회 직접 완료해 주세요.
      (인증은 고객님 본인 명의로, 고객님 PC에서만 진행됩니다.)
   3) 인증이 끝나면 프로그램 창의 [인증 완료 - 다음] 버튼을 누르세요.
-  4) 도구가 목록의 모든 페이지를 자동으로 넘기며 '모든 하위(상세) 페이지'와
-     세션 쿠키를 빠짐없이 저장합니다.
+  4) 도구가 목록의 모든 페이지를 자동으로 넘기고, 구조 확인용 하위(상세) 페이지
+     샘플과 세션 쿠키를 저장합니다. (몇 분이면 끝납니다)
   5) 끝나면 바탕화면에 "진단폴더 이거 보내주세요.zip" 이 생성됩니다.
   6) 그 zip 파일 하나만 보내주시면 나머지는 저희가 진행합니다.
 
@@ -16,7 +16,7 @@
   DIAG_AUTO=1      GUI 없이 자동(헤드리스) 일괄 실행 (CI 검증용)
   DIAG_HEADLESS=1  브라우저 창 없이 실행
   DIAG_SITES=foxalba,queenalba   대상 사이트 제한
-  DIAG_MAX_DETAIL=0  사이트별 상세 저장 개수 제한(0=무제한, 모든 하위페이지)
+  DIAG_MAX_DETAIL=80 사이트별 상세 저장 개수(기본 80 샘플, 0=무제한/전수)
   DIAG_MAX_PAGES=300 목록 페이지 자동탐색 상한(안전장치)
 """
 
@@ -50,7 +50,7 @@ def envint(name, default):
 
 AUTO = os.environ.get("DIAG_AUTO") == "1"
 HEADLESS = os.environ.get("DIAG_HEADLESS") == "1"
-MAX_DETAIL = envint("DIAG_MAX_DETAIL", 0)        # 0 = 무제한 (모든 하위페이지)
+MAX_DETAIL = envint("DIAG_MAX_DETAIL", 80)       # 진단용 사이트당 상세 샘플 기본 80건 (0=무제한)
 MAX_PAGES = envint("DIAG_MAX_PAGES", 300)
 ONLY_SITES = [s for s in os.environ.get("DIAG_SITES", "").split(",") if s]
 
@@ -282,7 +282,7 @@ def prepare_out_root():
     os.makedirs(out_root, exist_ok=True)
     with open(os.path.join(out_root, "_읽어주세요.txt"), "w", encoding="utf-8") as f:
         f.write("이 zip 을 그대로 보내주시면 됩니다.\n"
-                "각 사이트 폴더: 모든 목록(list_*.html), 모든 하위페이지(detail_*.html),"
+                "각 사이트 폴더: 목록(list_*.html), 하위페이지 샘플(detail_*.html),"
                 " 구조 리포트(structure_report.txt), 세션 쿠키(cookies.txt/json)\n"
                 f"생성: {stamp}\n")
     return desk, out_root
@@ -362,7 +362,7 @@ def run_gui():
         text=("① [시작하기] → 브라우저가 열립니다.\n"
               "② 브라우저에서 '비회원 본인인증'을 1회 직접 완료하세요.\n"
               "③ 인증이 끝나면 아래 [인증 완료 - 다음] 버튼을 누르세요.\n"
-              "④ 자동으로 목록·모든 하위페이지·쿠키를 저장합니다.\n"
+              "④ 자동으로 목록·하위페이지 샘플·쿠키를 저장합니다. (몇 분 소요)\n"
               "⑤ 끝나면 바탕화면에 ' 진단폴더 이거 보내주세요.zip ' 이 생깁니다."),
         font=("맑은 고딕", 10), bg="#f4f5f7", fg="#333", justify="left")
     guide.pack(padx=20, pady=(0, 8), anchor="w")
