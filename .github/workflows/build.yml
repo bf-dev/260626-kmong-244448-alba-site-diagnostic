@@ -40,7 +40,7 @@ jobs:
         env:
           DIAG_AUTO: "1"
           DIAG_HEADLESS: "1"
-          DIAG_SITES: "foxalba"
+          DIAG_SITES: "foxalba,queenalba"
           DIAG_MAX_PAGES: "2"
           DIAG_MAX_DETAIL: "2"
         run: |

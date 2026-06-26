@@ -100,7 +100,13 @@ def make_driver():
     opts.add_argument("--disable-dev-shm-usage")
     opts.add_argument("--disable-blink-features=AutomationControlled")
     opts.add_experimental_option("excludeSwitches", ["enable-automation"])
-    return webdriver.Chrome(options=opts)  # Selenium Manager 가 드라이버 자동 설치
+    drv = webdriver.Chrome(options=opts)  # Selenium Manager 가 드라이버 자동 설치
+    # 게이트(본인인증/리다이렉트)에서 무한 대기하지 않도록 페이지 로드 상한.
+    try:
+        drv.set_page_load_timeout(45)
+    except Exception:
+        pass
+    return drv
 
 
 def wait_for_user(label):
