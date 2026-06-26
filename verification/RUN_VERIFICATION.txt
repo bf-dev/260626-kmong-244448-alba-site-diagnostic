@@ -1,0 +1,25 @@
+# 실행 검증 (frozen binary + Selenium + headless Chrome, host=main JP, 2026-06-26T01:11:29Z)
+Chrome: Google Chrome 149.0.7827.200 
+Selenium: 4.45.0  PyInstaller onefile: 22913536 bytes
+
+## fox 실행 결과 (검증용 캡: 3페이지/상세8개; 배포 기본값 DIAG_MAX_DETAIL=0=전체)
+Archive:  /home/bfdev/Desktop/진단폴더 이거 보내주세요.zip
+  Length      Date    Time    Name
+---------  ---------- -----   ----
+      232  2026-06-26 03:10   진단폴더 이거 보내주세요/_읽어주세요.txt
+   129688  2026-06-26 03:10   진단폴더 이거 보내주세요/foxalba/detail_201801221335138780.html
+   150274  2026-06-26 03:10   진단폴더 이거 보내주세요/foxalba/detail_202404291548224647.html
+      218  2026-06-26 03:10   진단폴더 이거 보내주세요/foxalba/cookies.txt
+   112940  2026-06-26 03:10   진단폴더 이거 보내주세요/foxalba/detail_202410161659008650.html
+   291114  2026-06-26 03:10   진단폴더 이거 보내주세요/foxalba/list_002.html
+   158045  2026-06-26 03:10   진단폴더 이거 보내주세요/foxalba/detail_20250521103011.html
+   112701  2026-06-26 03:10   진단폴더 이거 보내주세요/foxalba/detail_202506040221562787.html
+   290594  2026-06-26 03:10   진단폴더 이거 보내주세요/foxalba/list_001.html
+   134819  2026-06-26 03:10   진단폴더 이거 보내주세요/foxalba/detail_202404151035596519.html
+   121327  2026-06-26 03:10   진단폴더 이거 보내주세요/foxalba/detail_202604010106407204.html
+      422  2026-06-26 03:10   진단폴더 이거 보내주세요/foxalba/cookies.json
+      445  2026-06-26 03:10   진단폴더 이거 보내주세요/foxalba/structure_report.txt
+   116256  2026-06-26 03:10   진단폴더 이거 보내주세요/foxalba/detail_202509081507359294.html
+   291693  2026-06-26 03:10   진단폴더 이거 보내주세요/foxalba/list_003.html
+---------                     -------
+  1910768                     15 files
