@@ -19,12 +19,20 @@
 GitHub Actions `windows-latest` + PyInstaller 로 빌드. `.github/workflows/build.yml` 참고.
 산출물: `dist/사이트진단도구.exe` (artifact `site-diagnostic-exe`).
 
-## 로컬 검증 완료 (Linux)
-- `python3 -m py_compile diagnose.py` OK
-- `discover_links()` 라이브 fox 목록에서 상세 idx 126개 추출, top 패턴 `offer_content.asp?idx`
-- `save_netscape_cookies()` Netscape 형식 정상
-- Selenium 브라우저 경로는 Windows 빌드에서만 실행 검증 가능
+## 빌드 + 실행검증 완료 (Windows, 2026-06-26)
+GitHub Actions `windows-latest` 에서 빌드 후 **같은 러너에서 exe 를 실제 실행**하는 스모크 단계로 검증.
+- 산출물: 진짜 Windows `PE32+ console x86-64` exe (~24.7MB)
+- 스모크 결과: exe 실행 → Chrome 구동 → foxalba 진입 → 쿠키 2개 저장 →
+  목록 자동순회로 고유 상세링크 137개 발견 → 상세/목록 HTML 저장 →
+  바탕화면 `진단폴더 이거 보내주세요.zip` 생성까지 전부 성공.
+- exe 가 직접 캡처한 스크린샷에 foxalba 비회원 핸드폰인증 게이트 확인.
 
-## 미해결 (소유자 필요)
-- 'windows dev skill' 부재 + 게이트웨이 호스트에 gh/GitHub 인증 없음 -> exe 빌드 불가.
-  GitHub repo+token 또는 Windows 러너 또는 해당 skill 위치 중 하나 필요.
+수정한 실제 버그:
+- 영문 Windows(cp1252)에서 한글 print 시 `UnicodeEncodeError` 크래시 → stdout/stderr UTF-8 강제.
+- onefile 에 selenium 서브모듈 미번들(`No module named selenium.webdriver.chrome.webdriver`)
+  → `--collect-all selenium` + trio 스택.
+
+## 전달
+Actions 아티팩트 저장 쿼터가 가득 차서 **GitHub Release** 로 전달:
+`gh release download latest` (asset: exe, `windows-runtime-verification.zip`).
+GitHub 가 한글 asset 이름을 `default.exe` 로 치환하므로, 고객 전달 시 `사이트진단도구.exe` 로 리네임.

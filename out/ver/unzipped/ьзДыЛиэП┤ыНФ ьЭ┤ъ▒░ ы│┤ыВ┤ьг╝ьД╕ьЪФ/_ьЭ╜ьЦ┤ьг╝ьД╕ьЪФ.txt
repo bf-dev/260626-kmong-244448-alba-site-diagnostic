@@ -1,0 +1,3 @@
+이 zip 을 그대로 보내주시면 됩니다.
+각 사이트 폴더: 모든 목록(list_*.html), 모든 하위페이지(detail_*.html), 구조 리포트(structure_report.txt), 세션 쿠키(cookies.txt/json)
+생성: 20260626_0157
