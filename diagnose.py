@@ -113,6 +113,7 @@ def make_driver():
     opts.add_argument("--no-sandbox")
     opts.add_argument("--disable-dev-shm-usage")
     opts.add_argument("--disable-blink-features=AutomationControlled")
+    opts.add_argument("--disable-popup-blocking")  # 퀸알바 본인인증 팝업 허용
     opts.add_experimental_option("excludeSwitches", ["enable-automation"])
     drv = webdriver.Chrome(options=opts)  # Selenium Manager 가 드라이버 자동 설치
     # 게이트(본인인증/리다이렉트)에서 무한 대기하지 않도록 페이지 로드 상한.
@@ -139,6 +140,28 @@ def snap(driver, path):
         driver.save_screenshot(path)
     except Exception as e:
         log(f"  (스크린샷 실패: {e})")
+
+
+def ensure_live_window(driver):
+    """본인인증 팝업(window.open) 이후 활성 창이 바뀌거나 닫혀도 살아있는 창으로 복구.
+    퀸알바는 인증을 별도 팝업창에서 진행해 원래 창 핸들이 무효화될 수 있으므로,
+    살아있는 창으로 전환하고(없으면 새 탭 생성) 크롤을 이어간다."""
+    try:
+        handles = driver.window_handles
+    except Exception:
+        handles = []
+    if handles:
+        for h in reversed(handles):   # 보통 인증 후 마지막 창이 본 화면
+            try:
+                driver.switch_to.window(h)
+                return True
+            except Exception:
+                continue
+    try:
+        driver.switch_to.new_window("tab")  # 모든 창이 닫혔으면 같은 세션에 새 탭
+        return True
+    except Exception:
+        return False
 
 
 def save_netscape_cookies(cookies, path):
@@ -247,13 +270,35 @@ def process_site(driver, key, conf, out_root):
     log("\n" + "=" * 50)
     log(f"[{conf['label']}] 브라우저에서 비회원 본인인증을 완료해 주세요.")
     log("=" * 50)
-    driver.get(conf["entry"])
-    time.sleep(1.5)
+    try:
+        driver.get(conf["entry"])
+        time.sleep(1.5)
+    except Exception as e:
+        log(f"  (진입 페이지 로드 지연: {e})")
     snap(driver, os.path.join(site_dir, "_화면_01_진입.png"))
     wait_for_user(conf["label"])
+
+    # 인증 팝업 이후 살아있는 창으로 복구하고, 대상 사이트 페이지로 이동해 세션을 확정.
+    ensure_live_window(driver)
+    for attempt in range(2):
+        try:
+            driver.get(conf["list_tpl"].format(pg=1))
+            time.sleep(1.2)
+            break
+        except Exception as e:
+            log(f"  (세션 확정 재시도 {attempt+1}: {e})")
+            ensure_live_window(driver)
     snap(driver, os.path.join(site_dir, "_화면_02_인증후.png"))
 
-    cookies = driver.get_cookies()
+    try:
+        cookies = driver.get_cookies()
+    except Exception as e:
+        log(f"  (쿠키 읽기 재시도: {e})")
+        ensure_live_window(driver)
+        try:
+            cookies = driver.get_cookies()
+        except Exception:
+            cookies = []
     save_netscape_cookies(cookies, os.path.join(site_dir, "cookies.txt"))
     with open(os.path.join(site_dir, "cookies.json"), "w", encoding="utf-8") as f:
         json.dump(cookies, f, ensure_ascii=False, indent=2)
