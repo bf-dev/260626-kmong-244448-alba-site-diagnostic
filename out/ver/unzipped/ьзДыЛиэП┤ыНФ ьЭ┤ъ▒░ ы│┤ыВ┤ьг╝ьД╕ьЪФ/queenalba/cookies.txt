@@ -1,0 +1,5 @@
+# Netscape HTTP Cookie File
+# saved by diagnose tool
+
+.queenalba.net	TRUE	/	FALSE	2147483647	happy_mobile	off
+queenalba.net	FALSE	/	FALSE	2147483647	PHPSESSID	33f480a4e1a251d68a653f5af404d793

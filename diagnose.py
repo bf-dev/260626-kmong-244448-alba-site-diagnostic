@@ -467,11 +467,20 @@ def run_gui():
     WAIT_CB = gui_wait
 
     append("준비되었습니다. [시작하기] 를 눌러주세요.")
+
+    # GUI 자기검증용: 창을 띄워 정상 구성됨을 확인한 뒤 자동 종료(실제 실행 아님).
+    if os.environ.get("DIAG_GUITEST") == "1":
+        root.update_idletasks()
+        root.update()
+        root.after(envint("DIAG_GUITEST_MS", 1500), root.destroy)
+
     root.mainloop()
     return 0
 
 
 def main():
+    if os.environ.get("DIAG_GUITEST") == "1":
+        return run_gui()
     if AUTO:
         return run_headless()
     try:

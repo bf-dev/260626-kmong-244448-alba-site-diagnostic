@@ -1,0 +1,20 @@
+[
+  {
+    "domain": ".queenalba.net",
+    "httpOnly": false,
+    "name": "happy_mobile",
+    "path": "/",
+    "sameSite": "Lax",
+    "secure": false,
+    "value": "off"
+  },
+  {
+    "domain": "queenalba.net",
+    "httpOnly": false,
+    "name": "PHPSESSID",
+    "path": "/",
+    "sameSite": "Lax",
+    "secure": false,
+    "value": "33f480a4e1a251d68a653f5af404d793"
+  }
+]

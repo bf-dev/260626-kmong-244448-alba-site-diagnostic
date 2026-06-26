@@ -61,6 +61,17 @@ jobs:
           }
           Compress-Archive -Path verification_out\* -DestinationPath windows-runtime-verification.zip -Force
 
+      - name: GUI construct test (tkinter bundled in frozen exe)
+        shell: pwsh
+        env:
+          DIAG_GUITEST: "1"
+          DIAG_GUITEST_MS: "1500"
+        run: |
+          $p = Start-Process -FilePath ".\dist\사이트진단도구.exe" -PassThru
+          $p | Wait-Process -Timeout 60
+          if ($p.ExitCode -ne 0) { Write-Error "GUI exe built window but exited $($p.ExitCode)"; exit 1 }
+          Write-Host "GUI construct OK (tkinter window created and closed cleanly)"
+
       - name: Publish exe + verification to Release
         if: always()
         shell: bash
