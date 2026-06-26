@@ -15,9 +15,16 @@
   queenalba/ cookies.txt cookies.json list_*.html detail_*.html structure_report.txt
 ```
 
+## 형태
+**tkinter GUI (콘솔 없음)**. 고객은 [시작하기] → 브라우저에서 본인인증 →
+[인증 완료 - 다음] 버튼만 누르면 됨. 진행상황은 창 안의 로그에 표시되고
+끝나면 결과 폴더가 자동으로 열린다. `DIAG_AUTO=1` 이면 GUI 없이 헤드리스 일괄(검증용).
+
 ## 빌드 (Windows exe)
-GitHub Actions `windows-latest` + PyInstaller 로 빌드. `.github/workflows/build.yml` 참고.
-산출물: `dist/사이트진단도구.exe` (artifact `site-diagnostic-exe`).
+GitHub Actions `windows-latest` + PyInstaller `--onefile --windowed` 로 빌드.
+CI에서 (a) 실제 exe 헤드리스 실행→zip 생성 스모크, (b) GUI 창 구성(tkinter 번들) 자기검증
+두 단계를 모두 통과해야 릴리스됨. `.github/workflows/build.yml` 참고.
+산출물: GitHub Release `latest` 의 exe (한글 asset명이 `default.exe`로 치환됨 → `사이트진단도구.exe`로 리네임).
 
 ## 빌드 + 실행검증 완료 (Windows, 2026-06-26)
 GitHub Actions `windows-latest` 에서 빌드 후 **같은 러너에서 exe 를 실제 실행**하는 스모크 단계로 검증.
