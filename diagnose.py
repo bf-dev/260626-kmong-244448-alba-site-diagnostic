@@ -31,6 +31,14 @@ import datetime
 
 DESKTOP_FOLDER_NAME = "진단폴더 이거 보내주세요"
 
+# 콘솔 코드페이지가 한글을 못 받는 환경(영문 Windows cp1252 등)에서도
+# 한글 출력이 깨지거나 죽지 않도록 표준 출력 인코딩을 UTF-8 로 강제.
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
+
 
 def envint(name, default):
     try:
