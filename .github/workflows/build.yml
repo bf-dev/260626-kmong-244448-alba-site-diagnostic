@@ -5,6 +5,9 @@ on:
     branches: [ main ]
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: windows-latest
@@ -54,16 +57,18 @@ jobs:
           Get-ChildItem -Recurse verification_out\unzipped -Include *.png,structure_report.txt | ForEach-Object {
             Copy-Item $_.FullName (Join-Path "verification_out" ($_.Directory.Name + "_" + $_.Name)) -Force
           }
+          Compress-Archive -Path verification_out\* -DestinationPath windows-runtime-verification.zip -Force
 
-      - name: Upload exe
-        uses: actions/upload-artifact@v4
-        with:
-          name: site-diagnostic-exe
-          path: dist/*.exe
-
-      - name: Upload runtime verification
+      - name: Publish exe + verification to Release
         if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: windows-runtime-verification
-          path: verification_out/**
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          files=(dist/*.exe)
+          [ -f windows-runtime-verification.zip ] && files+=(windows-runtime-verification.zip)
+          gh release create latest "${files[@]}" \
+            --title "site diagnostic exe (latest)" \
+            --notes "Auto-built Windows exe + Windows runtime verification (smoke test on windows-latest)." \
+            --clobber \
+          || gh release upload latest "${files[@]}" --clobber
