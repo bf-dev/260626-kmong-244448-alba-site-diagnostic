@@ -70,5 +70,4 @@ jobs:
           gh release create latest "${files[@]}" \
             --title "site diagnostic exe (latest)" \
             --notes "Auto-built Windows exe + Windows runtime verification (smoke test on windows-latest)." \
-            --clobber \
           || gh release upload latest "${files[@]}" --clobber
