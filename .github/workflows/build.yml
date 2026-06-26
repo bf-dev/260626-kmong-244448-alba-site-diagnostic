@@ -24,6 +24,12 @@ jobs:
         run: >
           pyinstaller --onefile --console
           --name "사이트진단도구"
+          --collect-all selenium
+          --collect-all trio
+          --collect-all trio_websocket
+          --collect-all outcome
+          --collect-all wsproto
+          --collect-all sortedcontainers
           diagnose.py
 
       - name: Smoke test (run the real exe on Windows)
