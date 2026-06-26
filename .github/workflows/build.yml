@@ -26,8 +26,38 @@ jobs:
           --name "사이트진단도구"
           diagnose.py
 
-      - name: Upload artifact
+      - name: Smoke test (run the real exe on Windows)
+        shell: pwsh
+        env:
+          DIAG_AUTO: "1"
+          DIAG_HEADLESS: "1"
+          DIAG_SITES: "foxalba"
+          DIAG_MAX_PAGES: "2"
+          DIAG_MAX_DETAIL: "2"
+        run: |
+          Write-Host "Chrome:"; (Get-Item "C:\Program Files\Google\Chrome\Application\chrome.exe").VersionInfo.ProductVersion
+          & ".\dist\사이트진단도구.exe"
+          $zip = Join-Path $env:USERPROFILE "Desktop\진단폴더 이거 보내주세요.zip"
+          if (-not (Test-Path $zip)) { Write-Error "exe ran but produced NO zip — runtime failed"; exit 1 }
+          Write-Host "OK: produced $zip"
+          New-Item -ItemType Directory -Force -Path verification_out | Out-Null
+          Copy-Item $zip verification_out\
+          Expand-Archive -Path $zip -DestinationPath verification_out\unzipped -Force
+          Get-ChildItem -Recurse verification_out\unzipped | Select-Object FullName,Length | Format-Table -AutoSize
+          # surface captured screenshots + structure report at top level for easy review
+          Get-ChildItem -Recurse verification_out\unzipped -Include *.png,structure_report.txt | ForEach-Object {
+            Copy-Item $_.FullName (Join-Path "verification_out" ($_.Directory.Name + "_" + $_.Name)) -Force
+          }
+
+      - name: Upload exe
         uses: actions/upload-artifact@v4
         with:
           name: site-diagnostic-exe
           path: dist/*.exe
+
+      - name: Upload runtime verification
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-runtime-verification
+          path: verification_out/**

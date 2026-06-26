@@ -102,6 +102,14 @@ def wait_for_user(label):
     input(f"\n>>> [{label}] 인증을 완료하셨으면 Enter 를 눌러주세요... ")
 
 
+def snap(driver, path):
+    """화면 캡처(진단/검증용). 실패해도 무시."""
+    try:
+        driver.save_screenshot(path)
+    except Exception as e:
+        log(f"  (스크린샷 실패: {e})")
+
+
 def save_netscape_cookies(cookies, path):
     lines = ["# Netscape HTTP Cookie File", "# saved by diagnose tool", ""]
     for c in cookies:
@@ -207,7 +215,10 @@ def process_site(driver, key, conf, out_root):
     log(f"[{conf['label']}] 브라우저를 엽니다. 화면에서 비회원 본인인증을 완료해 주세요.")
     log("=" * 60)
     driver.get(conf["entry"])
+    time.sleep(1.5)
+    snap(driver, os.path.join(site_dir, "_화면_01_진입.png"))
     wait_for_user(conf["label"])
+    snap(driver, os.path.join(site_dir, "_화면_02_인증후.png"))
 
     cookies = driver.get_cookies()
     save_netscape_cookies(cookies, os.path.join(site_dir, "cookies.txt"))
