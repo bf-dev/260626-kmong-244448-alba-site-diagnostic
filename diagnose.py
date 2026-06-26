@@ -1,19 +1,19 @@
 # -*- coding: utf-8 -*-
 """
-여우알바 / 퀸알바 사이트 구조 자동 진단 도구 (고객 PC 실행용)
+여우알바 / 퀸알바 사이트 구조 자동 진단 도구 (고객 PC 실행용, GUI)
 --------------------------------------------------------
-실행하시면:
-  1) 각 사이트가 브라우저 창으로 열립니다.
-  2) 화면 안내대로 '비회원 본인인증'을 1회 직접 완료해 주세요.
+콘솔 없이 창(GUI)으로 실행됩니다.
+  1) [시작하기] 를 누르면 사이트가 브라우저 창으로 열립니다.
+  2) 브라우저에서 '비회원 본인인증'을 1회 직접 완료해 주세요.
      (인증은 고객님 본인 명의로, 고객님 PC에서만 진행됩니다.)
-  3) 인증이 끝나면 콘솔 창에서 Enter 를 누르세요.
+  3) 인증이 끝나면 프로그램 창의 [인증 완료 - 다음] 버튼을 누르세요.
   4) 도구가 목록의 모든 페이지를 자동으로 넘기며 '모든 하위(상세) 페이지'와
      세션 쿠키를 빠짐없이 저장합니다.
-  5) 바탕화면에 "진단폴더 이거 보내주세요.zip" 으로 저장됩니다.
+  5) 끝나면 바탕화면에 "진단폴더 이거 보내주세요.zip" 이 생성됩니다.
   6) 그 zip 파일 하나만 보내주시면 나머지는 저희가 진행합니다.
 
 환경변수(검증/자동화용, 일반 고객은 신경쓰지 않으셔도 됩니다):
-  DIAG_AUTO=1      인증 대기 input() 생략 (헤드리스 자동 실행)
+  DIAG_AUTO=1      GUI 없이 자동(헤드리스) 일괄 실행 (CI 검증용)
   DIAG_HEADLESS=1  브라우저 창 없이 실행
   DIAG_SITES=foxalba,queenalba   대상 사이트 제한
   DIAG_MAX_DETAIL=0  사이트별 상세 저장 개수 제한(0=무제한, 모든 하위페이지)
@@ -28,6 +28,7 @@ import time
 import shutil
 import zipfile
 import datetime
+import threading
 
 DESKTOP_FOLDER_NAME = "진단폴더 이거 보내주세요"
 
@@ -73,9 +74,22 @@ SITES = {
     },
 }
 
+# 진행 로그/인증대기 흐름은 콜백으로 주입(콘솔 또는 GUI 양쪽 지원).
+LOG_SINK = None          # callable(str) or None -> print
+WAIT_CB = None           # callable(label) -> blocks until user confirms auth
+
 
 def log(msg):
-    print(msg, flush=True)
+    if LOG_SINK:
+        try:
+            LOG_SINK(msg)
+        except Exception:
+            pass
+        return
+    try:
+        print(msg, flush=True)
+    except Exception:
+        pass
 
 
 def desktop_dir():
@@ -112,6 +126,9 @@ def make_driver():
 def wait_for_user(label):
     if AUTO:
         log(f">>> [{label}] DIAG_AUTO: 인증 대기 생략")
+        return
+    if WAIT_CB:
+        WAIT_CB(label)
         return
     input(f"\n>>> [{label}] 인증을 완료하셨으면 Enter 를 눌러주세요... ")
 
@@ -174,6 +191,7 @@ def crawl_lists(driver, conf, site_dir, report):
         all_ids += new
         all_hrefs += id_links
         report.append(f"  목록 {pg:03d}: size={len(html)} 상세링크={len(id_links)} 신규={len(new)}")
+        log(f"  목록 {pg}페이지 저장 (상세링크 {len(id_links)}개, 신규 {len(new)}개)")
         if not page_ids and not id_links:
             empty_streak += 1
             if empty_streak >= 2:
@@ -185,7 +203,6 @@ def crawl_lists(driver, conf, site_dir, report):
             # 새 ID가 더 안 나오면 끝까지 본 것으로 간주(여우알바: 페이지 끝에서 반복)
             report.append(f"  -> {pg}페이지부터 신규 ID 없음, 목록 순회 종료")
             break
-    # 패턴 요약(마지막 페이지 기준 + 전체)
     return list(dict.fromkeys(all_ids)), list(dict.fromkeys(all_hrefs))
 
 
@@ -199,6 +216,7 @@ def crawl_details(driver, conf, site_dir, ids, hrefs, report):
         targets = [h if h.startswith("http") else base + "/" + h.lstrip("/") for h in hrefs]
     total = min(len(targets), limit)
     report.append(f"  상세 대상 {len(targets)}개 중 {total}개 저장 예정 (MAX_DETAIL={MAX_DETAIL})")
+    log(f"  하위(상세) 페이지 {total}개 저장 시작...")
     for n, url in enumerate(targets):
         if saved >= limit:
             break
@@ -215,8 +233,9 @@ def crawl_details(driver, conf, site_dir, ids, hrefs, report):
             f.write(html)
         saved += 1
         if saved % 25 == 0:
-            log(f"    ...상세 {saved}/{total} 저장")
+            log(f"    ...하위 페이지 {saved}/{total} 저장")
     report.append(f"  상세(하위) 페이지 저장: {saved}개")
+    log(f"  하위(상세) 페이지 {saved}개 저장 완료")
     return saved
 
 
@@ -225,9 +244,9 @@ def process_site(driver, key, conf, out_root):
     os.makedirs(site_dir, exist_ok=True)
     report = [f"# {conf['label']}", f"entry: {conf['entry']}", ""]
 
-    log("\n" + "=" * 60)
-    log(f"[{conf['label']}] 브라우저를 엽니다. 화면에서 비회원 본인인증을 완료해 주세요.")
-    log("=" * 60)
+    log("\n" + "=" * 50)
+    log(f"[{conf['label']}] 브라우저에서 비회원 본인인증을 완료해 주세요.")
+    log("=" * 50)
     driver.get(conf["entry"])
     time.sleep(1.5)
     snap(driver, os.path.join(site_dir, "_화면_01_진입.png"))
@@ -248,15 +267,13 @@ def process_site(driver, key, conf, out_root):
 
     report.append("\n## 하위(상세) 페이지 저장")
     saved = crawl_details(driver, conf, site_dir, ids, hrefs, report)
-    log(f"  - 하위 페이지 {saved}개 저장")
 
     with open(os.path.join(site_dir, "structure_report.txt"), "w", encoding="utf-8") as f:
         f.write("\n".join(report))
     return saved
 
 
-def main():
-    log(__doc__)
+def prepare_out_root():
     stamp = datetime.datetime.now().strftime("%Y%m%d_%H%M")
     desk = desktop_dir()
     out_root = os.path.join(desk, DESKTOP_FOLDER_NAME)
@@ -268,15 +285,24 @@ def main():
                 "각 사이트 폴더: 모든 목록(list_*.html), 모든 하위페이지(detail_*.html),"
                 " 구조 리포트(structure_report.txt), 세션 쿠키(cookies.txt/json)\n"
                 f"생성: {stamp}\n")
+    return desk, out_root
 
-    try:
-        driver = make_driver()
-    except Exception as e:
-        log(f"\n[오류] 크롬을 열 수 없습니다. 크롬 설치를 확인해 주세요.\n상세: {e}")
-        if not AUTO:
-            input("Enter 로 종료...")
-        return 1
 
+def zip_out_root(desk, out_root):
+    zip_path = os.path.join(desk, DESKTOP_FOLDER_NAME + ".zip")
+    if os.path.exists(zip_path):
+        os.remove(zip_path)
+    with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
+        for root, _, files in os.walk(out_root):
+            for fn in files:
+                full = os.path.join(root, fn)
+                zf.write(full, os.path.relpath(full, os.path.dirname(out_root)))
+    return zip_path
+
+
+def run_collection(out_root):
+    """드라이버 생성 -> 사이트별 처리. 총 저장 하위페이지 수 반환."""
+    driver = make_driver()
     total = 0
     try:
         for key, conf in SITES.items():
@@ -291,23 +317,169 @@ def main():
             driver.quit()
         except Exception:
             pass
+    return total
 
-    zip_path = os.path.join(desk, DESKTOP_FOLDER_NAME + ".zip")
-    if os.path.exists(zip_path):
-        os.remove(zip_path)
-    with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
-        for root, _, files in os.walk(out_root):
-            for fn in files:
-                full = os.path.join(root, fn)
-                zf.write(full, os.path.relpath(full, os.path.dirname(out_root)))
 
-    log("\n" + "=" * 60)
+# ---- 헤드리스/자동 일괄 실행 (CI 검증·자동화용) ----------------------------
+def run_headless():
+    log(__doc__)
+    desk, out_root = prepare_out_root()
+    try:
+        total = run_collection(out_root)
+    except Exception as e:
+        log(f"\n[오류] 크롬을 열 수 없습니다. 크롬 설치를 확인해 주세요.\n상세: {e}")
+        return 1
+    zip_path = zip_out_root(desk, out_root)
+    log("\n" + "=" * 50)
     log(f"완료. 바탕화면의 다음 파일을 보내주세요:\n  {zip_path}")
     log(f"총 저장 하위페이지: {total}개")
-    log("=" * 60)
-    if not AUTO:
-        input("Enter 로 종료...")
+    log("=" * 50)
     return 0
+
+
+# ---- GUI 실행 (고객용 기본) ------------------------------------------------
+def run_gui():
+    import tkinter as tk
+    from tkinter import scrolledtext, messagebox
+
+    global LOG_SINK, WAIT_CB
+
+    root = tk.Tk()
+    root.title("여우알바·퀸알바 사이트 진단 도구")
+    root.geometry("640x560")
+    root.configure(bg="#f4f5f7")
+
+    auth_event = threading.Event()
+    state = {"running": False}
+
+    # ---- 위젯 ----
+    head = tk.Label(root, text="여우알바 · 퀸알바 사이트 진단 도구",
+                    font=("맑은 고딕", 15, "bold"), bg="#f4f5f7", fg="#1a1a1a")
+    head.pack(pady=(16, 4))
+
+    guide = tk.Label(
+        root,
+        text=("① [시작하기] → 브라우저가 열립니다.\n"
+              "② 브라우저에서 '비회원 본인인증'을 1회 직접 완료하세요.\n"
+              "③ 인증이 끝나면 아래 [인증 완료 - 다음] 버튼을 누르세요.\n"
+              "④ 자동으로 목록·모든 하위페이지·쿠키를 저장합니다.\n"
+              "⑤ 끝나면 바탕화면에 ' 진단폴더 이거 보내주세요.zip ' 이 생깁니다."),
+        font=("맑은 고딕", 10), bg="#f4f5f7", fg="#333", justify="left")
+    guide.pack(padx=20, pady=(0, 8), anchor="w")
+
+    status = tk.Label(root, text="대기 중 — [시작하기] 를 눌러주세요.",
+                      font=("맑은 고딕", 10, "bold"), bg="#eef1f6", fg="#1452cc",
+                      anchor="w", padx=10, pady=8)
+    status.pack(fill="x", padx=16)
+
+    box = scrolledtext.ScrolledText(root, height=14, font=("Consolas", 9),
+                                    bg="#101418", fg="#d6e2ff", insertbackground="#fff")
+    box.pack(fill="both", expand=True, padx=16, pady=10)
+
+    btns = tk.Frame(root, bg="#f4f5f7")
+    btns.pack(fill="x", padx=16, pady=(0, 14))
+
+    def set_status(txt, color="#1452cc"):
+        status.config(text=txt, fg=color)
+
+    def append(msg):
+        box.insert("end", msg + "\n")
+        box.see("end")
+
+    def gui_log(msg):
+        root.after(0, append, msg)
+
+    def gui_wait(label):
+        # 워커 스레드에서 호출 -> 메인 스레드에 버튼 활성화 요청 후 대기
+        auth_event.clear()
+        root.after(0, lambda: (
+            set_status(f"[{label}] 브라우저에서 본인인증을 완료한 뒤 ▶ [인증 완료 - 다음] 버튼을 누르세요.", "#c0392b"),
+            auth_btn.config(state="normal")
+        ))
+        auth_event.wait()
+        root.after(0, lambda: (
+            auth_btn.config(state="disabled"),
+            set_status(f"[{label}] 수집 중입니다... 잠시만 기다려 주세요.", "#1452cc")
+        ))
+
+    def on_auth_done():
+        auth_btn.config(state="disabled")
+        auth_event.set()
+
+    def worker():
+        try:
+            desk, out_root = prepare_out_root()
+            total = run_collection(out_root)
+            zip_path = zip_out_root(desk, out_root)
+            root.after(0, lambda: finish_ok(zip_path, total))
+        except Exception as e:
+            root.after(0, lambda: finish_err(e))
+
+    def finish_ok(zip_path, total):
+        set_status("완료! 아래 zip 파일을 보내주세요.", "#1e8e3e")
+        append("\n" + "=" * 50)
+        append(f"완료. 바탕화면의 파일을 보내주세요:\n  {zip_path}")
+        append(f"총 저장 하위페이지: {total}개")
+        start_btn.config(state="normal", text="다시 실행")
+        state["running"] = False
+        try:
+            # 결과 폴더를 탐색기로 열어줌
+            os.startfile(os.path.dirname(zip_path))  # type: ignore[attr-defined]
+        except Exception:
+            pass
+        messagebox.showinfo("완료",
+                            f"바탕화면에 생성된\n'{DESKTOP_FOLDER_NAME}.zip'\n파일을 보내주세요.")
+
+    def finish_err(e):
+        set_status("오류가 발생했습니다.", "#c0392b")
+        append(f"\n[오류] {e}")
+        start_btn.config(state="normal", text="다시 시작")
+        state["running"] = False
+        messagebox.showerror(
+            "오류",
+            "크롬을 열 수 없거나 실행 중 문제가 발생했습니다.\n"
+            "구글 크롬이 설치되어 있는지 확인 후 다시 시도해 주세요.\n\n"
+            f"상세: {e}")
+
+    def on_start():
+        if state["running"]:
+            return
+        state["running"] = True
+        box.delete("1.0", "end")
+        start_btn.config(state="disabled", text="실행 중...")
+        set_status("브라우저를 여는 중입니다...", "#1452cc")
+        threading.Thread(target=worker, daemon=True).start()
+
+    start_btn = tk.Button(btns, text="시작하기", command=on_start,
+                          font=("맑은 고딕", 11, "bold"), bg="#1452cc", fg="white",
+                          activebackground="#0d3aa0", activeforeground="white",
+                          relief="flat", padx=20, pady=8)
+    start_btn.pack(side="left")
+
+    auth_btn = tk.Button(btns, text="인증 완료 - 다음 ▶", command=on_auth_done,
+                         font=("맑은 고딕", 11, "bold"), bg="#1e8e3e", fg="white",
+                         activebackground="#14672c", activeforeground="white",
+                         relief="flat", padx=20, pady=8, state="disabled")
+    auth_btn.pack(side="right")
+
+    # 콜백을 전역에 연결
+    LOG_SINK = gui_log
+    WAIT_CB = gui_wait
+
+    append("준비되었습니다. [시작하기] 를 눌러주세요.")
+    root.mainloop()
+    return 0
+
+
+def main():
+    if AUTO:
+        return run_headless()
+    try:
+        return run_gui()
+    except Exception as e:
+        # GUI 를 못 띄우는 환경이면 콘솔/헤드리스로 폴백
+        log(f"[GUI 실행 불가, 일괄 모드로 전환] {e}")
+        return run_headless()
 
 
 if __name__ == "__main__":

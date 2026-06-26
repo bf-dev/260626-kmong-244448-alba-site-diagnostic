@@ -25,7 +25,7 @@ jobs:
 
       - name: Build exe
         run: >
-          pyinstaller --onefile --console
+          pyinstaller --onefile --windowed
           --name "사이트진단도구"
           --collect-all selenium
           --collect-all trio
@@ -45,7 +45,9 @@ jobs:
           DIAG_MAX_DETAIL: "2"
         run: |
           Write-Host "Chrome:"; (Get-Item "C:\Program Files\Google\Chrome\Application\chrome.exe").VersionInfo.ProductVersion
-          & ".\dist\사이트진단도구.exe"
+          # windowed(GUI) exe — DIAG_AUTO 로 GUI 없이 헤드리스 일괄 경로 실행. 종료까지 대기.
+          $p = Start-Process -FilePath ".\dist\사이트진단도구.exe" -PassThru
+          $p | Wait-Process -Timeout 600
           $zip = Join-Path $env:USERPROFILE "Desktop\진단폴더 이거 보내주세요.zip"
           if (-not (Test-Path $zip)) { Write-Error "exe ran but produced NO zip — runtime failed"; exit 1 }
           Write-Host "OK: produced $zip"
