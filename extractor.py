@@ -321,16 +321,43 @@ def run_gui():
     btn_frame = tk.Frame(root)
     btn_frame.pack(fill="x", padx=10, pady=(0, 10))
 
-    def open_browser(url, label):
+    def open_browser(url, label, fresh=False):
         def task():
             try:
+                # 새 세션이 필요하면(예: 여우 수집 완료 후 퀸 시작) 기존 드라이버를
+                # 무조건 정리하고 새 webdriver.Chrome 을 만든다. 오래된(stale) 세션을
+                # 재사용하면 'invalid session id' 오류가 난다.
+                if fresh and state["driver"] is not None:
+                    try:
+                        state["driver"].quit()
+                    except Exception:
+                        pass
+                    state["driver"] = None
                 if state["driver"] is None:
                     log("브라우저를 여는 중...")
                     state["driver"] = make_driver(False)
+                else:
+                    # 재사용 전에 세션이 살아있는지 확인. 죽었으면 새로 만든다.
+                    try:
+                        _ = state["driver"].current_url
+                    except Exception:
+                        try:
+                            state["driver"].quit()
+                        except Exception:
+                            pass
+                        log("이전 브라우저 세션이 종료되어 새 창을 엽니다...")
+                        state["driver"] = make_driver(False)
                 state["driver"].get(url)
                 log("브라우저를 열었습니다. 비회원 본인인증을 완료 후 아래 버튼을 눌러주세요.")
             except Exception as e:
                 log(f"브라우저 오류: {e}")
+                # 오류 발생 시 깨진 드라이버 상태를 정리해 다음 클릭이 새 세션을 만들도록.
+                try:
+                    if state["driver"] is not None:
+                        state["driver"].quit()
+                except Exception:
+                    pass
+                state["driver"] = None
         threading.Thread(target=task, daemon=True).start()
 
     def start_fox():
@@ -343,6 +370,15 @@ def run_gui():
                 log("여우알바 수집을 시작합니다...")
                 state["fox"] = scrape_fox(sess, log, EXTRACTOR_MAX)
                 state["fox_done"] = True
+                # 여우 수집이 끝나면 여우 드라이버를 명시적으로 종료하고 None 으로 비운다.
+                # 퀸알바는 반드시 새 Chrome 세션으로 시작해야 하며, 닫힌 여우 세션을
+                # 재사용하면 'invalid session id' 오류가 난다.
+                if state["driver"] is not None:
+                    try:
+                        state["driver"].quit()
+                    except Exception:
+                        pass
+                    state["driver"] = None
                 btn_queen_login.config(state="normal")
                 btn_save.config(state="normal")
             except Exception as e:
@@ -390,7 +426,7 @@ def run_gui():
     # Step 2 퀸알바
     tk.Label(btn_frame, text="② 퀸알바", font=("Malgun Gothic", 9, "bold")).grid(row=2, column=0, padx=4, pady=2, sticky="w")
     btn_queen_login = tk.Button(btn_frame, text="퀸알바 로그인 시작", state="disabled",
-                                command=lambda: open_browser(QUEEN_ENTRY, "퀸알바"))
+                                command=lambda: open_browser(QUEEN_ENTRY, "퀸알바", fresh=True))
     btn_queen_login.grid(row=3, column=0, padx=4, pady=2, sticky="ew")
     btn_queen_go = tk.Button(btn_frame, text="퀸알바 인증 완료 → 수집 시작", command=start_queen)
     btn_queen_go.grid(row=3, column=1, padx=4, pady=2, sticky="ew")
