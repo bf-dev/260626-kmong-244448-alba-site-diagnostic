@@ -93,7 +93,10 @@ FOX_DETAIL = FOX_BASE + "/offer/offer_content.asp?idx={idx}"
 FOX_DETAIL_RE = re.compile(r'offer_content\.asp\?idx=([0-9]+)', re.I)
 
 QUEEN_BASE = "https://www.queenalba.net"
-QUEEN_ENTRY = QUEEN_BASE + "/guin_list.php"
+# 본인인증(비회원 인증)은 메인 페이지에서 진행한다. /guin/ 게시판은 인증 세션이
+# 잡혀야 열린다(미인증 시 error.jpg 안내 페이지만 1.3KB 내려옴).
+QUEEN_ENTRY = QUEEN_BASE + "/"
+QUEEN_GUIN_FIRST = QUEEN_BASE + "/guin/guin_list.php?pg=1"
 QUEEN_LIST = QUEEN_BASE + "/guin/guin_list.php?pg={pg}"
 QUEEN_DETAIL = QUEEN_BASE + "/guin/guin_detail.php?num={num}&pg={pg}&cou={cou}"
 QUEEN_DETAIL_RE = re.compile(r'guin_detail\.php\?num=([0-9]+)&pg=([0-9]+)&cou=([0-9]+)', re.I)
@@ -125,6 +128,53 @@ def session_from_driver(driver):
     """로그인된 Chrome 세션의 쿠키를 requests.Session 으로 옮긴다(상세 페이지 고속 수집)."""
     sess = requests.Session()
     sess.headers.update({"User-Agent": UA})
+    try:
+        for c in driver.get_cookies():
+            try:
+                sess.cookies.set(c["name"], c["value"], domain=c.get("domain"), path=c.get("path", "/"))
+            except Exception:
+                sess.cookies.set(c["name"], c["value"])
+    except Exception:
+        pass
+    return sess
+
+
+def queen_session_from_driver(driver, log=None):
+    """퀸알바 본인인증 직후 호출. 인증 팝업(window.open auth_popup)이 닫히면서
+    Chrome 의 활성 창이 바뀌어 있을 수 있으므로 (1)메인 창으로 전환 후
+    (2)guin 목록 페이지로 직접 이동해 인증 세션을 /guin/ 경로에 확정시키고
+    (3)그 시점의 쿠키를 requests.Session 으로 옮긴다.
+    목록 페이지로 먼저 이동하지 않으면 인증 쿠키가 올바른 도메인/경로에 안 잡혀
+    상세링크 0개가 된다."""
+    def _log(m):
+        if log:
+            log(m)
+    # (1) 메인 창으로 전환 (팝업이 닫힌 뒤 활성 창이 팝업 핸들에 남아있을 수 있음)
+    try:
+        handles = driver.window_handles
+        # 살아있는 첫 창을 메인으로 사용
+        for h in handles:
+            try:
+                driver.switch_to.window(h)
+                _ = driver.current_url  # 살아있는지 확인
+                break
+            except Exception:
+                continue
+    except Exception:
+        pass
+    # (2) guin 목록으로 직접 이동해 세션 활성화 + 쿠키 확정
+    try:
+        driver.get(QUEEN_GUIN_FIRST)
+        time.sleep(2)
+    except Exception as e:
+        _log(f"  퀸알바 목록 이동 경고: {e}")
+    # (3) 이동 후 쿠키 추출
+    sess = requests.Session()
+    try:
+        ua = driver.execute_script("return navigator.userAgent")
+    except Exception:
+        ua = UA
+    sess.headers.update({"User-Agent": ua or UA})
     try:
         for c in driver.get_cookies():
             try:
@@ -197,7 +247,7 @@ def scrape_queen(sess, log, max_items=0):
     seen = set()
     for pg in range(1, MAX_PAGES + 1):
         try:
-            html = _get(sess, QUEEN_LIST.format(pg=pg), encoding="utf-8", referer=QUEEN_ENTRY)
+            html = _get(sess, QUEEN_LIST.format(pg=pg), encoding="utf-8", referer=QUEEN_GUIN_FIRST)
         except Exception as e:
             log(f"  목록 {pg}페이지 오류: {e}")
             break
@@ -390,8 +440,11 @@ def run_gui():
         def task():
             try:
                 btn_queen_go.config(state="disabled")
-                sess = session_from_driver(state["driver"]) if state["driver"] else requests.Session()
-                if not state["driver"]:
+                if state["driver"]:
+                    # 인증 팝업 처리 + guin 목록 이동 후 쿠키 추출(상세링크 0개 버그 수정)
+                    sess = queen_session_from_driver(state["driver"], log)
+                else:
+                    sess = requests.Session()
                     sess.headers.update({"User-Agent": UA})
                 log("퀸알바 수집을 시작합니다...")
                 state["queen"] = scrape_queen(sess, log, EXTRACTOR_MAX)
@@ -469,8 +522,9 @@ def run_auto():
         if driver:
             driver.get(QUEEN_ENTRY)
             time.sleep(1.0)
-            sess = session_from_driver(driver)
-            sess.headers.update({"User-Agent": UA})
+            # AUTO(헤드리스)는 본인인증을 못 하므로 보통 0건이지만, 흐름은 GUI 와 동일하게
+            # guin 목록 이동 후 쿠키를 추출한다.
+            sess = queen_session_from_driver(driver, log)
     except Exception:
         pass
     queen = scrape_queen(sess, log, EXTRACTOR_MAX)
