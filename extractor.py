@@ -399,6 +399,9 @@ def run_gui():
                         state["driver"] = make_driver(False)
                 state["driver"].get(url)
                 log("브라우저를 열었습니다. 비회원 본인인증을 완료 후 아래 버튼을 눌러주세요.")
+                # 퀸알바 인증 창(fresh=True)을 연 경우에만 '수집 시작' 버튼을 활성화한다.
+                if fresh:
+                    root.after(0, lambda: btn_queen_go.config(state="normal"))
             except Exception as e:
                 log(f"브라우저 오류: {e}")
                 # 오류 발생 시 깨진 드라이버 상태를 정리해 다음 클릭이 새 세션을 만들도록.
@@ -443,6 +446,18 @@ def run_gui():
                 if state["driver"]:
                     # 인증 팝업 처리 + guin 목록 이동 후 쿠키 추출(상세링크 0개 버그 수정)
                     sess = queen_session_from_driver(state["driver"], log)
+                    # 인증 확인: guin 목록 pg=1 에서 상세링크가 있어야 함
+                    try:
+                        test_html = _get(sess, QUEEN_LIST.format(pg=1), encoding="utf-8", referer=QUEEN_GUIN_FIRST)
+                        test_links = QUEEN_DETAIL_RE.findall(test_html)
+                        if not test_links:
+                            log("⚠ 퀸알바 인증이 완료되지 않은 것 같습니다. 브라우저에서 본인인증을 다시 완료한 후 버튼을 눌러주세요.")
+                            btn_queen_go.config(state="normal")
+                            return
+                        log(f"인증 확인: 목록 1페이지에 상세링크 {len(test_links)}개 발견, 수집을 시작합니다...")
+                    except Exception as e:
+                        log(f"인증 확인 중 오류: {e}")
+                        # 확인 실패 시에도 계속 진행(네트워크 일시 오류일 수 있음)
                 else:
                     sess = requests.Session()
                     sess.headers.update({"User-Agent": UA})
@@ -481,7 +496,7 @@ def run_gui():
     btn_queen_login = tk.Button(btn_frame, text="퀸알바 로그인 시작", state="disabled",
                                 command=lambda: open_browser(QUEEN_ENTRY, "퀸알바", fresh=True))
     btn_queen_login.grid(row=3, column=0, padx=4, pady=2, sticky="ew")
-    btn_queen_go = tk.Button(btn_frame, text="퀸알바 인증 완료 → 수집 시작", command=start_queen)
+    btn_queen_go = tk.Button(btn_frame, text="퀸알바 인증 완료 → 수집 시작", command=start_queen, state="disabled")
     btn_queen_go.grid(row=3, column=1, padx=4, pady=2, sticky="ew")
 
     # Step 3 저장
