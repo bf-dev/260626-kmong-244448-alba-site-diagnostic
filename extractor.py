@@ -138,6 +138,22 @@ Object.defineProperty(navigator, 'languages', {get: () => ['ko-KR', 'ko', 'en-US
     return drv
 
 
+def make_uc_driver():
+    """퀸알바 전용 - undetected_chromedriver로 봇 감지 우회."""
+    import undetected_chromedriver as uc
+    opts = uc.ChromeOptions()
+    opts.add_argument("--start-maximized")
+    opts.add_argument("--window-size=1400,1000")
+    opts.add_argument("--disable-popup-blocking")
+    opts.add_argument("--lang=ko-KR")
+    drv = uc.Chrome(options=opts, use_subprocess=True)
+    try:
+        drv.set_page_load_timeout(45)
+    except Exception:
+        pass
+    return drv
+
+
 def session_from_driver(driver):
     """로그인된 Chrome 세션의 쿠키를 requests.Session 으로 옮긴다(상세 페이지 고속 수집)."""
     sess = requests.Session()
@@ -356,7 +372,10 @@ def run_gui():
                     state["driver"] = None
                 if state["driver"] is None:
                     log("브라우저를 여는 중...")
-                    state["driver"] = make_driver(False)
+                    if fresh:
+                        state["driver"] = make_uc_driver()   # queen: undetected
+                    else:
+                        state["driver"] = make_driver(False)  # fox: regular
                 else:
                     # 재사용 전에 세션이 살아있는지 확인. 죽었으면 새로 만든다.
                     try:
@@ -520,9 +539,14 @@ def run_auto():
     # 퀸알바는 Selenium 드라이버 세션을 직접 사용한다(쿠키 추출 불필요).
     try:
         if driver:
-            driver.get(QUEEN_ENTRY)
+            queen_driver = make_uc_driver()
+            queen_driver.get(QUEEN_ENTRY)
             time.sleep(1.0)
-            queen = scrape_queen_selenium(driver, log, EXTRACTOR_MAX)
+            queen = scrape_queen_selenium(queen_driver, log, EXTRACTOR_MAX)
+            try:
+                queen_driver.quit()
+            except Exception:
+                pass
         else:
             queen = []
     except Exception as e:

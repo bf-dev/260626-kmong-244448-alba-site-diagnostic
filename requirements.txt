@@ -1,1 +1,4 @@
-selenium>=4.20
+selenium
+requests
+openpyxl
+undetected-chromedriver

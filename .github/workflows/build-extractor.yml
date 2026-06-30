@@ -15,7 +15,7 @@ jobs:
       - name: Install deps
         run: |
           pip install --upgrade pip
-          pip install selenium webdriver-manager requests openpyxl pyinstaller
+          pip install selenium webdriver-manager requests openpyxl undetected-chromedriver pyinstaller
       - name: Build exe
         run: >
           pyinstaller --onefile --windowed
@@ -26,6 +26,7 @@ jobs:
           --collect-all outcome
           --collect-all wsproto
           --collect-all sortedcontainers
+          --collect-all undetected_chromedriver
           extractor.py
       - name: Smoke test
         shell: pwsh
