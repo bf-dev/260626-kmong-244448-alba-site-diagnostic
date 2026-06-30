@@ -115,8 +115,22 @@ def make_driver(headless):
     opts.add_argument("--disable-dev-shm-usage")
     opts.add_argument("--disable-blink-features=AutomationControlled")
     opts.add_argument("--disable-popup-blocking")  # 퀸알바 본인인증 팝업 허용
+    opts.add_argument("--disable-features=IsolateOrigins,site-per-process")
+    opts.add_argument(f"--user-agent={UA}")
     opts.add_experimental_option("excludeSwitches", ["enable-automation"])
+    opts.add_experimental_option("useAutomationExtension", False)
     drv = webdriver.Chrome(options=opts)  # Selenium Manager 가 드라이버 자동 설치
+    # 퀸알바 봇 탐지 우회: navigator.webdriver 등 자동화 흔적을 새 문서마다 덮어쓴다.
+    try:
+        drv.execute_cdp_cmd("Page.addScriptToEvaluateOnNewDocument", {
+            "source": """
+Object.defineProperty(navigator, 'webdriver', {get: () => undefined});
+Object.defineProperty(navigator, 'plugins', {get: () => [1, 2, 3, 4, 5]});
+Object.defineProperty(navigator, 'languages', {get: () => ['ko-KR', 'ko', 'en-US', 'en']});
+"""
+        })
+    except Exception:
+        pass
     try:
         drv.set_page_load_timeout(45)
     except Exception:
