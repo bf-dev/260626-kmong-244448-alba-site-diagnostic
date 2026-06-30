@@ -139,50 +139,6 @@ def session_from_driver(driver):
     return sess
 
 
-def queen_session_from_driver(driver, log=None):
-    """퀸알바 본인인증 직후 호출. 인증 팝업(window.open auth_popup)이 닫히면서
-    Chrome 의 활성 창이 바뀌어 있을 수 있으므로 (1)메인 창으로 전환 후
-    (2)guin 목록 페이지로 직접 이동해 인증 세션을 /guin/ 경로에 확정시키고
-    (3)그 시점의 쿠키를 requests.Session 으로 옮긴다.
-    목록 페이지로 먼저 이동하지 않으면 인증 쿠키가 올바른 도메인/경로에 안 잡혀
-    상세링크 0개가 된다."""
-    def _log(m):
-        if log:
-            log(m)
-    # (1) 메인 창으로 전환 (팝업이 닫힌 뒤 활성 창이 팝업 핸들에 남아있을 수 있음)
-    try:
-        handles = driver.window_handles
-        # 살아있는 첫 창을 메인으로 사용
-        for h in handles:
-            try:
-                driver.switch_to.window(h)
-                _ = driver.current_url  # 살아있는지 확인
-                break
-            except Exception:
-                continue
-    except Exception:
-        pass
-    # (2) 고객이 이미 guin 목록으로 직접 이동해 인증을 확인한 상태이므로
-    #     추가 이동(driver.get) 없이 현재 창의 쿠키를 그대로 추출한다.
-    #     너무 일찍 이동하면 인증 세션이 메인 창에 확정되기 전이라 error.php 로
-    #     리다이렉트되어 인증 없는 쿠키가 잡힌다(상세링크 0개 원인).
-    sess = requests.Session()
-    try:
-        ua = driver.execute_script("return navigator.userAgent")
-    except Exception:
-        ua = UA
-    sess.headers.update({"User-Agent": ua or UA})
-    try:
-        for c in driver.get_cookies():
-            try:
-                sess.cookies.set(c["name"], c["value"], domain=c.get("domain"), path=c.get("path", "/"))
-            except Exception:
-                sess.cookies.set(c["name"], c["value"])
-    except Exception:
-        pass
-    return sess
-
-
 def _get(sess, url, encoding=None, referer=None):
     headers = {"Referer": referer} if referer else {}
     r = sess.get(url, headers=headers, timeout=30)
@@ -239,12 +195,15 @@ def scrape_fox(sess, log, max_items=0):
 
 
 # ===================== 퀸알바 수집 =====================
-def scrape_queen(sess, log, max_items=0):
-    targets = []  # (num, pg, cou)
+def scrape_queen_selenium(driver, log, max_items=0):
+    """퀸알바 수집 - Selenium 드라이버 세션 직접 사용 (쿠키 추출 불필요)."""
+    targets = []
     seen = set()
     for pg in range(1, MAX_PAGES + 1):
         try:
-            html = _get(sess, QUEEN_LIST.format(pg=pg), encoding="utf-8", referer=QUEEN_GUIN_FIRST)
+            driver.get(QUEEN_LIST.format(pg=pg))
+            time.sleep(0.5)
+            html = driver.page_source
         except Exception as e:
             log(f"  목록 {pg}페이지 오류: {e}")
             break
@@ -261,14 +220,16 @@ def scrape_queen(sess, log, max_items=0):
         if max_items and len(targets) >= max_items:
             targets = targets[:max_items]
             break
-        time.sleep(0.2)
+        time.sleep(0.3)
 
     rows, phones = [], set()
     total = len(targets)
     for n, (num, pg, cou) in enumerate(targets, 1):
         url = QUEEN_DETAIL.format(num=num, pg=pg, cou=cou)
         try:
-            html = _get(sess, url, encoding="utf-8", referer=QUEEN_LIST.format(pg=pg))
+            driver.get(url)
+            time.sleep(0.3)
+            html = driver.page_source
         except Exception:
             continue
         r = parse_queen(html)
@@ -280,7 +241,6 @@ def scrape_queen(sess, log, max_items=0):
         rows.append(r)
         if n % 5 == 0 or n == total:
             log(f"연락처 수집 중 ({len(rows)}건)... {n}/{total}")
-        time.sleep(0.05)
     log(f"퀸알바 수집 완료: {len(rows)}건")
     return rows
 
@@ -447,26 +407,34 @@ def run_gui():
         def task():
             try:
                 btn_queen_go.config(state="disabled")
-                if state["driver"]:
-                    # 인증 팝업 처리 + guin 목록 이동 후 쿠키 추출(상세링크 0개 버그 수정)
-                    sess = queen_session_from_driver(state["driver"], log)
-                    # 인증 확인: guin 목록 pg=1 에서 상세링크가 있어야 함
+                if not state["driver"]:
+                    log("브라우저가 열려있지 않습니다. 퀸알바 로그인 시작 버튼을 먼저 눌러주세요.")
+                    btn_queen_go.config(state="normal")
+                    return
+                # 인증 확인: 현재 페이지에서 guin_list 목록이 보이는지 확인
+                try:
+                    cur = state["driver"].current_url
+                except Exception:
+                    cur = ""
+                if "guin_list" not in cur:
+                    # 목록 페이지로 이동해 확인
                     try:
-                        test_html = _get(sess, QUEEN_LIST.format(pg=1), encoding="utf-8", referer=QUEEN_GUIN_FIRST)
-                        test_links = QUEEN_DETAIL_RE.findall(test_html)
-                        if not test_links:
-                            log("⚠ 퀸알바 인증이 완료되지 않은 것 같습니다. 브라우저에서 본인인증을 다시 완료한 후 버튼을 눌러주세요.")
-                            btn_queen_go.config(state="normal")
-                            return
-                        log(f"인증 확인: 목록 1페이지에 상세링크 {len(test_links)}개 발견, 수집을 시작합니다...")
-                    except Exception as e:
-                        log(f"인증 확인 중 오류: {e}")
-                        # 확인 실패 시에도 계속 진행(네트워크 일시 오류일 수 있음)
-                else:
-                    sess = requests.Session()
-                    sess.headers.update({"User-Agent": UA})
+                        state["driver"].get(QUEEN_GUIN_FIRST)
+                        time.sleep(1.5)
+                    except Exception:
+                        pass
+                try:
+                    test_html = state["driver"].page_source
+                    test_links = QUEEN_DETAIL_RE.findall(test_html)
+                except Exception:
+                    test_links = []
+                if not test_links:
+                    log("⚠ 퀸알바 인증이 완료되지 않은 것 같습니다. 브라우저에서 본인인증을 완료하고 업체 목록이 보이는 것을 확인한 후 버튼을 눌러주세요.")
+                    btn_queen_go.config(state="normal")
+                    return
+                log(f"인증 확인: 목록 1페이지에 상세링크 {len(test_links)}개 발견, 수집을 시작합니다...")
                 log("퀸알바 수집을 시작합니다...")
-                state["queen"] = scrape_queen(sess, log, EXTRACTOR_MAX)
+                state["queen"] = scrape_queen_selenium(state["driver"], log, EXTRACTOR_MAX)
                 state["queen_done"] = True
                 btn_save.config(state="normal")
             except Exception as e:
@@ -537,16 +505,17 @@ def run_auto():
     sess.headers.update({"User-Agent": UA})
 
     fox = scrape_fox(sess, log, EXTRACTOR_MAX)
+    # 퀸알바는 Selenium 드라이버 세션을 직접 사용한다(쿠키 추출 불필요).
     try:
         if driver:
             driver.get(QUEEN_ENTRY)
             time.sleep(1.0)
-            # AUTO(헤드리스)는 본인인증을 못 하므로 보통 0건이지만, 흐름은 GUI 와 동일하게
-            # guin 목록 이동 후 쿠키를 추출한다.
-            sess = queen_session_from_driver(driver, log)
-    except Exception:
-        pass
-    queen = scrape_queen(sess, log, EXTRACTOR_MAX)
+            queen = scrape_queen_selenium(driver, log, EXTRACTOR_MAX)
+        else:
+            queen = []
+    except Exception as e:
+        log(f"퀸알바 수집 경고: {e}")
+        queen = []
 
     if driver:
         try:
