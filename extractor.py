@@ -95,7 +95,7 @@ FOX_DETAIL_RE = re.compile(r'offer_content\.asp\?idx=([0-9]+)', re.I)
 QUEEN_BASE = "https://www.queenalba.net"
 # 본인인증(비회원 인증)은 메인 페이지에서 진행한다. /guin/ 게시판은 인증 세션이
 # 잡혀야 열린다(미인증 시 error.jpg 안내 페이지만 1.3KB 내려옴).
-QUEEN_ENTRY = QUEEN_BASE + "/"
+QUEEN_ENTRY = QUEEN_BASE + "/guin/guin_list.php"
 QUEEN_GUIN_FIRST = QUEEN_BASE + "/guin/guin_list.php?pg=1"
 QUEEN_LIST = QUEEN_BASE + "/guin/guin_list.php?pg={pg}"
 QUEEN_DETAIL = QUEEN_BASE + "/guin/guin_detail.php?num={num}&pg={pg}&cou={cou}"
@@ -162,13 +162,10 @@ def queen_session_from_driver(driver, log=None):
                 continue
     except Exception:
         pass
-    # (2) guin 목록으로 직접 이동해 세션 활성화 + 쿠키 확정
-    try:
-        driver.get(QUEEN_GUIN_FIRST)
-        time.sleep(2)
-    except Exception as e:
-        _log(f"  퀸알바 목록 이동 경고: {e}")
-    # (3) 이동 후 쿠키 추출
+    # (2) 고객이 이미 guin 목록으로 직접 이동해 인증을 확인한 상태이므로
+    #     추가 이동(driver.get) 없이 현재 창의 쿠키를 그대로 추출한다.
+    #     너무 일찍 이동하면 인증 세션이 메인 창에 확정되기 전이라 error.php 로
+    #     리다이렉트되어 인증 없는 쿠키가 잡힌다(상세링크 0개 원인).
     sess = requests.Session()
     try:
         ua = driver.execute_script("return navigator.userAgent")
@@ -398,7 +395,14 @@ def run_gui():
                         log("이전 브라우저 세션이 종료되어 새 창을 엽니다...")
                         state["driver"] = make_driver(False)
                 state["driver"].get(url)
-                log("브라우저를 열었습니다. 비회원 본인인증을 완료 후 아래 버튼을 눌러주세요.")
+                if fresh:
+                    log("브라우저를 열었습니다.\n"
+                        "1) 팝업에서 비회원 본인인증을 완료해 주세요.\n"
+                        "2) 인증 완료 후 아래 주소로 직접 이동해 업체 목록이 보이는지 확인해 주세요:\n"
+                        "   https://www.queenalba.net/guin/guin_list.php\n"
+                        "3) 목록이 보이면 [퀸알바 인증 완료 → 수집 시작] 버튼을 눌러주세요.")
+                else:
+                    log("브라우저를 열었습니다. 비회원 본인인증을 완료 후 아래 버튼을 눌러주세요.")
                 # 퀸알바 인증 창(fresh=True)을 연 경우에만 '수집 시작' 버튼을 활성화한다.
                 if fresh:
                     root.after(0, lambda: btn_queen_go.config(state="normal"))
