@@ -95,7 +95,7 @@ FOX_DETAIL_RE = re.compile(r'offer_content\.asp\?idx=([0-9]+)', re.I)
 QUEEN_BASE = "https://www.queenalba.net"
 # 본인인증(비회원 인증)은 메인 페이지에서 진행한다. /guin/ 게시판은 인증 세션이
 # 잡혀야 열린다(미인증 시 error.jpg 안내 페이지만 1.3KB 내려옴).
-QUEEN_ENTRY = QUEEN_BASE + "/guin/guin_list.php"
+QUEEN_ENTRY = QUEEN_BASE + "/"
 QUEEN_GUIN_FIRST = QUEEN_BASE + "/guin/guin_list.php?pg=1"
 QUEEN_LIST = QUEEN_BASE + "/guin/guin_list.php?pg={pg}"
 QUEEN_DETAIL = QUEEN_BASE + "/guin/guin_detail.php?num={num}&pg={pg}&cou={cou}"
@@ -356,11 +356,9 @@ def run_gui():
                         state["driver"] = make_driver(False)
                 state["driver"].get(url)
                 if fresh:
-                    log("브라우저를 열었습니다.\n"
-                        "1) 팝업에서 비회원 본인인증을 완료해 주세요.\n"
-                        "2) 인증 완료 후 아래 주소로 직접 이동해 업체 목록이 보이는지 확인해 주세요:\n"
-                        "   https://www.queenalba.net/guin/guin_list.php\n"
-                        "3) 목록이 보이면 [퀸알바 인증 완료 → 수집 시작] 버튼을 눌러주세요.")
+                    log("퀸알바 메인 페이지가 열렸습니다.\n"
+                        "비회원 본인인증을 완료해 주세요.\n"
+                        "인증 완료 후 [퀸알바 인증 완료 → 수집 시작] 버튼을 눌러주세요.")
                 else:
                     log("브라우저를 열었습니다. 비회원 본인인증을 완료 후 아래 버튼을 눌러주세요.")
                 # 퀸알바 인증 창(fresh=True)을 연 경우에만 '수집 시작' 버튼을 활성화한다.
