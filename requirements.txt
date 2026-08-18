@@ -1,4 +1,7 @@
-selenium
-requests
-openpyxl
-undetected-chromedriver
+# 배포 exe 는 버전을 고정한다. selenium/uc 의 드라이버 해석 API 가 버전마다 달라
+# 핀을 풀면 빌드마다 드라이버 기동 경로가 바뀔 수 있다.
+selenium==4.46.0
+undetected-chromedriver==3.5.5
+requests==2.32.3
+openpyxl==3.1.5
+setuptools>=68

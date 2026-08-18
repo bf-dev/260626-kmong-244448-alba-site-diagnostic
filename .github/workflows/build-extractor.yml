@@ -12,10 +12,29 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with: { python-version: "3.11" }
+
       - name: Install deps
         run: |
           pip install --upgrade pip
-          pip install selenium webdriver-manager requests openpyxl undetected-chromedriver pyinstaller
+          pip install -r requirements.txt pyinstaller
+
+      - name: Show runner Chrome version
+        shell: pwsh
+        run: |
+          # The runner's Chrome is deliberately NOT the customer's 151. The point of the
+          # driver proof below is that the exe adapts to whatever Chrome is installed.
+          $paths = @(
+            "$env:PROGRAMFILES\Google\Chrome\Application\chrome.exe",
+            "${env:PROGRAMFILES(X86)}\Google\Chrome\Application\chrome.exe",
+            "$env:LOCALAPPDATA\Google\Chrome\Application\chrome.exe"
+          )
+          foreach ($p in $paths) {
+            if (Test-Path $p) {
+              $v = (Get-Item $p).VersionInfo.ProductVersion
+              Write-Host "runner chrome: $p -> $v"
+            }
+          }
+
       - name: Build exe
         run: >
           pyinstaller --onefile --windowed
@@ -28,25 +47,97 @@ jobs:
           --collect-all sortedcontainers
           --collect-all undetected_chromedriver
           extractor.py
-      - name: Smoke test
+
+      - name: Driver proof - undetected_chromedriver attaches to the runner's real Chrome
+        shell: pwsh
+        env:
+          EXTRACTOR_DRIVERTEST: "1"
+          EXTRACTOR_LOG_FILE: ${{ github.workspace }}\drivertest.log
+        run: |
+          # Runs the SHIPPED exe through the SAME make_uc_driver() the customer hits.
+          # The exe is --windowed (no stdout), so the run log is read from the file above.
+          $p = Start-Process -FilePath ".\dist\업체연락처수집기.exe" -PassThru
+          $p | Wait-Process -Timeout 420
+          $log = "${{ github.workspace }}\drivertest.log"
+          if (Test-Path $log) {
+            Write-Host "----- drivertest.log -----"
+            Get-Content $log -Encoding UTF8 | ForEach-Object { Write-Host $_ }
+            Write-Host "----- end drivertest.log -----"
+          } else {
+            Write-Error "no drivertest.log produced"; exit 1
+          }
+          if ($p.ExitCode -ne 0) { Write-Error "driver proof FAILED (exit $($p.ExitCode))"; exit 1 }
+          if (-not (Select-String -Path $log -Pattern 'PASS: ' -Encoding UTF8)) {
+            Write-Error "driver proof did not report PASS"; exit 1
+          }
+          Write-Host "OK: undetected_chromedriver attached to the runner's installed Chrome"
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: { name: drivertest-log, path: drivertest.log }
+
+      - name: Smoke test (headless end-to-end, produces the xlsx)
         shell: pwsh
         env:
           EXTRACTOR_AUTO: "1"
           EXTRACTOR_HEADLESS: "1"
           EXTRACTOR_MAX: "2"
+          EXTRACTOR_LOG_FILE: ${{ github.workspace }}\smoke.log
         run: |
           $p = Start-Process -FilePath ".\dist\업체연락처수집기.exe" -PassThru
-          $p | Wait-Process -Timeout 300
+          $p | Wait-Process -Timeout 420
+          if (Test-Path "${{ github.workspace }}\smoke.log") { Get-Content "${{ github.workspace }}\smoke.log" -Encoding UTF8 | Select-Object -Last 40 }
           $xlsx = Join-Path $env:USERPROFILE "Desktop\업체연락처_여우알바_퀸알바.xlsx"
           if (-not (Test-Path $xlsx)) { Write-Error "No xlsx produced"; exit 1 }
           Write-Host "OK: $xlsx"
-      - name: Publish to Release
+
+      - name: GUI construct test (tkinter bundled, window launches)
+        shell: pwsh
+        run: |
+          $p = Start-Process -FilePath ".\dist\업체연락처수집기.exe" -PassThru
+          Start-Sleep -Seconds 15
+          if ($p.HasExited) { Write-Error "GUI exe exited early (code $($p.ExitCode)) - tkinter bundle failed"; exit 1 }
+          Stop-Process -Id $p.Id -Force
+          Write-Host "OK: GUI window constructed and stayed alive"
+
+      - name: GUI screenshot (real desktop session)
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path screenshots | Out-Null
+          $p = Start-Process -FilePath ".\dist\업체연락처수집기.exe" -PassThru
+          Start-Sleep -Seconds 12
+          Add-Type -AssemblyName System.Windows.Forms, System.Drawing
+          $b = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
+          $bmp = New-Object System.Drawing.Bitmap $b.Width, $b.Height
+          $g = [System.Drawing.Graphics]::FromImage($bmp)
+          $g.CopyFromScreen($b.Location, [System.Drawing.Point]::Empty, $b.Size)
+          $bmp.Save("screenshots/gui_244448.png")
+          Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue
+          $colors = @{}
+          for ($x = 0; $x -lt $b.Width; $x += 40) {
+            for ($y = 0; $y -lt $b.Height; $y += 40) { $colors[$bmp.GetPixel($x,$y).ToArgb()] = 1 }
+          }
+          Write-Host "distinct sampled colours: $($colors.Count)"
+          if ($colors.Count -lt 3) { Write-Error "screenshot looks blank"; exit 1 }
+
+      - uses: actions/upload-artifact@v4
         if: always()
+        with: { name: gui-screenshot, path: screenshots/*.png }
+
+      - name: Publish versioned exe to Release
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create extractor-latest dist/*.exe \
-            --title "업체연락처수집기 (latest)" \
-            --notes "Auto-built Windows extractor exe." \
-          || gh release upload extractor-latest dist/*.exe --clobber
+          VER=$(python -c "import re;print(re.search(r'APP_VERSION = \"([^\"]+)\"',open('extractor.py',encoding='utf-8').read()).group(1))")
+          echo "APP_VERSION=$VER"
+          # ASCII, version-suffixed name: GitHub mangles non-ASCII asset names to default.exe.
+          cp "dist/업체연락처수집기.exe" "dist/wcompany-collector-$VER.exe"
+          gh release create "extractor-v$VER" "dist/wcompany-collector-$VER.exe" \
+            --title "업체연락처수집기 v$VER" \
+            --notes "Chrome/chromedriver version pinning + Artifacts reporting." \
+          || gh release upload "extractor-v$VER" "dist/wcompany-collector-$VER.exe" --clobber
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: { name: exe, path: dist/*.exe }
